@@ -1,0 +1,5 @@
+telegram-bot/data/*
+!telegram-bot/data/.gitkeep
+telegram-bot/__pycache__/
+*.pyc
+*.bak*
