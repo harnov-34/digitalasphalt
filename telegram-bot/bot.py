@@ -8,8 +8,6 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 BOT_TOKEN=os.getenv("BOT_TOKEN","")
 ADMIN_ID=int(os.getenv("ADMIN_ID","0"))
 BRAND=os.getenv("BRAND","DIGITAL ASPHALT")
-QRIS_FILE_ID=os.getenv("QRIS_FILE_ID","")
-ADMIN_USERNAME=os.getenv("ADMIN_USERNAME","d_asphalt")
 DATA_DIR=Path(os.getenv("DATA_DIR","/opt/da-telegram-bot/data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -102,7 +100,7 @@ Pilih layanan:"""
         InlineKeyboardButton("💰 TOPUP SALDO", callback_data="topup"),
         InlineKeyboardButton("📦 AKUN SAYA", callback_data="my_accounts")
     ])
-    kb.append([InlineKeyboardButton("📞 ADMIN", url=f"https://t.me/{ADMIN_USERNAME}")])
+    kb.append([InlineKeyboardButton("📞 ADMIN", url="https://t.me/d_asphalt")])
     await update.message.reply_text(text,parse_mode="Markdown",reply_markup=InlineKeyboardMarkup(kb))
 
 async def cb(update:Update, context:ContextTypes.DEFAULT_TYPE):
@@ -120,14 +118,14 @@ async def cb(update:Update, context:ContextTypes.DEFAULT_TYPE):
         uid = update.effective_user.id
 
         await q.message.reply_photo(
-            photo=QRIS_FILE_ID,
+            photo="AgACAgUAAxkBAAIBf2n4Yr1YWYhX77fjKjM5TaqcUuNcAALpEGsbWBvBV3IvB1BgX4dfAQADAgADeQADOwQ",
             caption=(
                 "💳 QRIS PAYMENT DIGITAL ASPHALT\n"
                 "━━━━━━━━━━━━━━━━━━━━\n\n"
                 "Scan QR di atas untuk bayar topup saldo.\n"
                 "Setelah bayar WAJIB kirim screenshot ke admin.\n"
-                f"Admin: @{ADMIN_USERNAME}\n\n"
-                f"User ID: {uid}\n\nKirim bukti bayar ke admin: @{ADMIN_USERNAME}"
+                "Admin: @d_asphalt\n\n"
+                f"User ID: {uid}\n\nKirim bukti bayar ke admin: @d_asphalt"
             )
         )
 
@@ -144,7 +142,7 @@ async def cb(update:Update, context:ContextTypes.DEFAULT_TYPE):
             "Payment sementara manual.\n\n"
             "Pilih nominal topup, lalu bayar via QRIS/transfer admin.\n"
             "Setelah bayar WAJIB kirim screenshot ke admin.\n"
-                f"Admin: @{ADMIN_USERNAME}\n\n"
+                "Admin: @d_asphalt\n\n"
             f"User ID kamu: {uid}",
             reply_markup=InlineKeyboardMarkup(kb)
         )
@@ -163,14 +161,24 @@ async def cb(update:Update, context:ContextTypes.DEFAULT_TYPE):
             f"Format chat admin:\nTOPUP {amount} {uid}\n\n"
             "Saldo masuk setelah admin approve.",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("📩 Kirim SS ke Admin", url=f"https://t.me/{ADMIN_USERNAME}")],
-                [InlineKeyboardButton("⬅️ Kembali", callback_data="topup")]
+                [InlineKeyboardButton("📩 Kirim SS ke Admin", url="https://t.me/d_asphalt")],
+                [InlineKeyboardButton("⬅️ Kembali", callback_data="topup")],
+                [InlineKeyboardButton("✅ Saya Sudah Bayar", callback_data="paid")]
             ])
         )
         return
 
     if data == "back_start":
         await start(update, context)
+        return
+
+    
+    if data == "paid":
+        await context.bot.send_message(
+            chat_id=ADMIN_ID,
+            text="💰 REQUEST TOPUP\nUser: " + str(uid)
+        )
+        await q.message.reply_text("⏳ Menunggu konfirmasi admin...")
         return
 
     if data.startswith("proto:"):
@@ -312,8 +320,6 @@ async def listuser(update:Update, context:ContextTypes.DEFAULT_TYPE):
 
 
 async def get_photo_id(update, context):
-    if update.effective_user.id != ADMIN_ID:
-        return
     if not update.message or not update.message.photo:
         return
 
@@ -327,6 +333,31 @@ async def get_photo_id(update, context):
         parse_mode="Markdown"
     )
 
+
+
+
+async def approve(update, context):
+    if update.effective_user.id != ADMIN_ID:
+        return
+
+    if len(context.args) < 2:
+        await update.message.reply_text("Format: /approve USER_ID NOMINAL")
+        return
+
+    uid = context.args[0]
+    amount = int(context.args[1])
+
+    db = load(USERS, {})
+    db.setdefault(uid, {"id":int(uid),"name":"","saldo":0,"accounts":[]})
+    db[uid]["saldo"] += amount
+    save(USERS, db)
+
+    await context.bot.send_message(
+        chat_id=int(uid),
+        text=f"✅ Topup berhasil! Saldo masuk Rp {amount:,}"
+    )
+
+    await update.message.reply_text("✅ Saldo berhasil ditambahkan")
 
 def main():
     app = (
@@ -344,6 +375,7 @@ def main():
     app.add_handler(CommandHandler("addserver",addserver))
     app.add_handler(CommandHandler("listserver",listserver))
     app.add_handler(CommandHandler("listuser",listuser))
+    app.add_handler(CommandHandler("approve",approve))
     app.add_handler(CallbackQueryHandler(cb))
     app.run_polling(drop_pending_updates=True)
 
