@@ -1,2 +1,0 @@
-#!/usr/bin/env bash
-exec /usr/local/sbin/da-proto-menu vless "VLESS MENU"

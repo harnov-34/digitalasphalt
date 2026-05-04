@@ -3,3 +3,4 @@ telegram-bot/data/*
 telegram-bot/__pycache__/
 *.pyc
 *.bak*
+sbin/
