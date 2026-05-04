@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+exec /usr/local/sbin/da-proto-menu vmess "VMESS MENU"

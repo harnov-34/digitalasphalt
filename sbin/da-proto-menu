@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+set +e
+
+RED="\033[1;31m"
+GREEN="\033[1;32m"
+YELLOW="\033[1;33m"
+CYAN="\e[96m"
+WHITE="\e[97m"
+NC="\033[0m"
+
+LINE="═══════════════════════════════════════════════════════"
+
+_top(){ echo -e "${CYAN}╔${LINE}╗${NC}"; }
+_mid(){ echo -e "${CYAN}╠${LINE}╣${NC}"; }
+_bot(){ echo -e "${CYAN}╚${LINE}╝${NC}"; }
+line(){ printf "${CYAN}║${NC} %-53b ${CYAN}║${NC}\n" "$(echo -e "$1")"; }
+
+pause(){
+  echo
+  read -n1 -s -r -p "Press any key to continue..."
+}
+
+PROTO="$1"
+TITLE="$2"
+
+while true; do
+  clear
+  DOMAIN="$(cat /etc/xray/domain /usr/local/etc/xray/domain /root/domain /root/domain.txt 2>/dev/null | head -n1)"
+  [[ -z "$DOMAIN" ]] && DOMAIN="-"
+
+  _top
+  line "                 ${WHITE}DIGITAL ASPHALT SCRIPT${NC}"
+  _bot
+  echo
+
+  _top
+  line "                     ${WHITE}${TITLE}${NC}"
+  _mid
+  line "[${YELLOW}01${NC}] ${WHITE}CREATE ACCOUNT${NC}      ${CYAN}│${NC} [${YELLOW}06${NC}] ${WHITE}DELETE USER${NC}"
+  line "[${YELLOW}02${NC}] ${WHITE}TRIAL ACCOUNT${NC}       ${CYAN}│${NC} [${YELLOW}07${NC}] ${WHITE}LOCK USER${NC}"
+  line "[${YELLOW}03${NC}] ${WHITE}RENEW ACCOUNT${NC}       ${CYAN}│${NC} [${YELLOW}08${NC}] ${WHITE}UNLOCK USER${NC}"
+  line "[${YELLOW}04${NC}] ${WHITE}USER LIST${NC}           ${CYAN}│${NC} [${YELLOW}09${NC}] ${WHITE}DELETE EXPIRED${NC}"
+  line "[${YELLOW}05${NC}] ${WHITE}DETAILS USER${NC}        ${CYAN}│${NC} [${YELLOW}00${NC}] ${WHITE}BACK MENU${NC}"
+  _bot
+  echo
+
+  _top
+  line "${GREEN}DOMAIN${NC} : ${WHITE}$DOMAIN${NC}"
+  _bot
+  echo
+
+  echo -ne "${GREEN}Select menu : ${NC}"
+  read -r opt
+
+  case "$opt" in
+    1|01) /usr/local/sbin/${PROTO}-create ;;
+    2|02) /usr/local/sbin/${PROTO}-trial ;;
+    3|03) /usr/local/sbin/${PROTO}-renew; pause ;;
+    4|04) /usr/local/sbin/${PROTO}-list ;;
+    5|05) /usr/local/sbin/${PROTO}-details ;;
+    6|06) /usr/local/sbin/${PROTO}-delete; pause ;;
+    7|07) /usr/local/sbin/${PROTO}-lock; pause ;;
+    8|08) /usr/local/sbin/${PROTO}-unlock; pause ;;
+    9|09) /usr/local/sbin/${PROTO}-delete-expired; pause ;;
+    0|00) exit 0 ;;
+    *) echo -e "${RED}Invalid option${NC}"; sleep 1 ;;
+  esac
+done
