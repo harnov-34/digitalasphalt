@@ -8,6 +8,8 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 BOT_TOKEN=os.getenv("BOT_TOKEN","")
 ADMIN_ID=int(os.getenv("ADMIN_ID","0"))
 BRAND=os.getenv("BRAND","DIGITAL ASPHALT")
+QRIS_FILE_ID=os.getenv("QRIS_FILE_ID","")
+ADMIN_USERNAME=os.getenv("ADMIN_USERNAME","d_asphalt")
 DATA_DIR=Path(os.getenv("DATA_DIR","/opt/da-telegram-bot/data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -100,7 +102,7 @@ Pilih layanan:"""
         InlineKeyboardButton("💰 TOPUP SALDO", callback_data="topup"),
         InlineKeyboardButton("📦 AKUN SAYA", callback_data="my_accounts")
     ])
-    kb.append([InlineKeyboardButton("📞 ADMIN", url="https://t.me/d_asphalt")])
+    kb.append([InlineKeyboardButton("📞 ADMIN", url=f"https://t.me/{ADMIN_USERNAME}")])
     await update.message.reply_text(text,parse_mode="Markdown",reply_markup=InlineKeyboardMarkup(kb))
 
 async def cb(update:Update, context:ContextTypes.DEFAULT_TYPE):
@@ -118,14 +120,14 @@ async def cb(update:Update, context:ContextTypes.DEFAULT_TYPE):
         uid = update.effective_user.id
 
         await q.message.reply_photo(
-            photo="AgACAgUAAxkBAAIBf2n4Yr1YWYhX77fjKjM5TaqcUuNcAALpEGsbWBvBV3IvB1BgX4dfAQADAgADeQADOwQ",
+            photo=QRIS_FILE_ID,
             caption=(
                 "💳 QRIS PAYMENT DIGITAL ASPHALT\n"
                 "━━━━━━━━━━━━━━━━━━━━\n\n"
                 "Scan QR di atas untuk bayar topup saldo.\n"
                 "Setelah bayar WAJIB kirim screenshot ke admin.\n"
-                "Admin: @d_asphalt\n\n"
-                f"User ID: {uid}\n\nKirim bukti bayar ke admin: @d_asphalt"
+                f"Admin: @{ADMIN_USERNAME}\n\n"
+                f"User ID: {uid}\n\nKirim bukti bayar ke admin: @{ADMIN_USERNAME}"
             )
         )
 
@@ -142,7 +144,7 @@ async def cb(update:Update, context:ContextTypes.DEFAULT_TYPE):
             "Payment sementara manual.\n\n"
             "Pilih nominal topup, lalu bayar via QRIS/transfer admin.\n"
             "Setelah bayar WAJIB kirim screenshot ke admin.\n"
-                "Admin: @d_asphalt\n\n"
+                f"Admin: @{ADMIN_USERNAME}\n\n"
             f"User ID kamu: {uid}",
             reply_markup=InlineKeyboardMarkup(kb)
         )
@@ -161,7 +163,7 @@ async def cb(update:Update, context:ContextTypes.DEFAULT_TYPE):
             f"Format chat admin:\nTOPUP {amount} {uid}\n\n"
             "Saldo masuk setelah admin approve.",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("📩 Kirim SS ke Admin", url="https://t.me/d_asphalt")],
+                [InlineKeyboardButton("📩 Kirim SS ke Admin", url=f"https://t.me/{ADMIN_USERNAME}")],
                 [InlineKeyboardButton("⬅️ Kembali", callback_data="topup")]
             ])
         )
@@ -310,6 +312,8 @@ async def listuser(update:Update, context:ContextTypes.DEFAULT_TYPE):
 
 
 async def get_photo_id(update, context):
+    if update.effective_user.id != ADMIN_ID:
+        return
     if not update.message or not update.message.photo:
         return
 
