@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import os, json, random, string, asyncio, re
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackQueryHandler, ContextTypes
 
@@ -68,9 +68,22 @@ def get_user(uid, name=""):
     db=load(USERS,{})
     sid=str(uid)
     if sid not in db:
-        db[sid]={"id":uid,"name":name,"saldo":0,"accounts":[]}
+        db[sid]={"id":uid,"name":name,"saldo":0,"accounts":[],"trials":{}}
         save(USERS,db)
     return db[sid], db
+
+
+def server_flag(label):
+    x = (label or "").upper()
+    if "INDONESIA" in x or "TELKOM" in x or "ID-" in x:
+        return "🇮🇩"
+    if "SINGAPORE" in x or "SG-" in x:
+        return "🇸🇬"
+    if "USA" in x or "UNITED STATES" in x or "US-" in x:
+        return "🇺🇸"
+    if "JAPAN" in x or "JP-" in x:
+        return "🇯🇵"
+    return "🌐"
 
 def active_servers():
     return [s for s in load(SERVERS,[]) if s.get("active",True)]
@@ -172,6 +185,28 @@ async def cb(update:Update, context:ContextTypes.DEFAULT_TYPE):
         await start(update, context)
         return
 
+    if data == "my_accounts":
+        accs = user.get("accounts", [])
+        if not accs:
+            await q.message.reply_text("📦 AKUN SAYA\n━━━━━━━━━━━━━━━━━━━━\nBelum ada akun aktif.")
+            return
+
+        txt = "📦 *AKUN SAYA*\n━━━━━━━━━━━━━━━━━━━━\n"
+        for i, a in enumerate(accs, 1):
+            detail = a.get("detail")
+            if detail:
+                txt += f"\n*{i}. {a.get('service','-')}*\n```{detail[-3200:]}```\n"
+            else:
+                txt += (
+                    f"\n*{i}. {a.get('service','-')}*\n"
+                    f"Username : `{a.get('username','-')}`\n"
+                    f"Server   : {a.get('server','-')}\n"
+                    f"Masa Aktif: {a.get('days','-')}\n"
+                )
+
+        await q.message.reply_text(txt[:3900], parse_mode="Markdown")
+        return
+
     
     if data == "paid":
         await context.bot.send_message(
@@ -187,7 +222,10 @@ async def cb(update:Update, context:ContextTypes.DEFAULT_TYPE):
         if not servers:
             await q.edit_message_text("❌ Server belum tersedia. Admin harus /addserver dulu.")
             return
-        kb=[[InlineKeyboardButton(s.get("label",s.get("name","SERVER")), callback_data=f"server:{proto}:{i}")] for i,s in enumerate(servers)]
+        kb=[]
+        for i,srv in enumerate(servers):
+            label=srv.get("label",srv.get("name","SERVER"))
+            kb.append([InlineKeyboardButton(f"{server_flag(label)} {label}", callback_data=f"server:{proto}:{i}")])
         await q.edit_message_text(f"🌐 Pilih server untuk *{proto}*:",parse_mode="Markdown",reply_markup=InlineKeyboardMarkup(kb))
         return
 
@@ -198,8 +236,9 @@ async def cb(update:Update, context:ContextTypes.DEFAULT_TYPE):
         if idx>=len(servers):
             await q.edit_message_text("❌ Server tidak valid.")
             return
+        trial_label = "🎁 Trial 2 Jam" if proto == "ZIVPN" else "🎁 Trial 1 Hari"
         kb=[
-            [InlineKeyboardButton("🎁 Trial 1 Hari", callback_data=f"buy:{proto}:{idx}:TRIAL")],
+            [InlineKeyboardButton(trial_label, callback_data=f"buy:{proto}:{idx}:TRIAL")],
             [InlineKeyboardButton("👥 2 IP / 150GB - 15 Hari - Rp 4.995", callback_data=f"buy:{proto}:{idx}:15")],
             [InlineKeyboardButton("👥 2 IP / 250GB - 30 Hari - Rp 9.990", callback_data=f"buy:{proto}:{idx}:30")],
         ]
@@ -231,7 +270,7 @@ async def cb(update:Update, context:ContextTypes.DEFAULT_TYPE):
             "/opt/da-telegram-bot/bin/da-bot-create-remote",
             host, port, rootuser, auth,
             proto.lower(), username, password,
-            str(plan["days"]), str(plan["ip"]), str(plan["quota"])
+            ("TRIAL2H" if proto == "ZIVPN" and plan_id == "TRIAL" else str(plan["days"])), str(plan["ip"]), str(plan["quota"])
         ]
 
         try:
@@ -258,7 +297,7 @@ async def cb(update:Update, context:ContextTypes.DEFAULT_TYPE):
             "service":proto,
             "username":username,
             "server":label,
-            "days":plan["days"],
+            "days":("2 Jam" if proto == "ZIVPN" and plan_id == "TRIAL" else plan["days"]),
             "created":datetime.now().isoformat()
         })
         db[str(uid)]=user
