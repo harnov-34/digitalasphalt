@@ -71,13 +71,13 @@ ZIVPN adalah fitur tambahan untuk koneksi berbasis UDP (lebih stabil untuk jarin
 - Custom multi-path tersedia di port tertentu
 - Support TLS & Non-TLS
 - Support Enhanced
-- Support Wilcard
+- Support Wildcard
 
 ---
 
 ## 🔄 SYSTEM ARCHITECTURE
 
-VPS-CBN (PRIVATE CORE)
+(PRIVATE CORE)
 │
 ├── License Server (3559)
 ├── Core Validation (8806)
