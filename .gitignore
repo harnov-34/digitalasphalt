@@ -1,9 +1,16 @@
-# backup files
+# private bot files
+telegram-bot/
+telegram-bot/data/
+telegram-bot/*.py
+
+# secrets
+.env
+config.env
+*.env
+
+# backup/log
 *.bak*
 *.backup
-
-# bot data (SANGAT PENTING)
-telegram-bot/data/
-
-# logs
+*.old
+*.tmp
 *.log
