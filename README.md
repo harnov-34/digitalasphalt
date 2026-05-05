@@ -42,8 +42,21 @@ Digital Asphalt menggunakan sistem proteksi berlapis:
 | TROJAN | gRPC     | 443 | -    |
 | TROJAN | WebSocket| 443 | 80   |
 | SSH    | WebSocket| 443 | 80   |
+| ZIVPN  | UDP      | -   | Custom |
 | SQUID  | Proxy    | 3128| -    |
 | OpenVPN| TCP/UDP  | 1194| 2200 |
+
+---
+
+## 🚀 ZIVPN (UDP TUNNEL)
+
+ZIVPN adalah fitur tambahan untuk koneksi berbasis UDP (lebih stabil untuk jaringan tertentu).
+
+- ⚡ Mode UDP (low latency)
+- 📶 Cocok untuk jaringan mobile / gaming
+- 🔐 Terintegrasi dengan system license
+- 🔄 Auto service management via systemd
+- 🧩 Terhubung ke menu (`zivpn-menu`)
 
 ---
 
@@ -57,6 +70,8 @@ Digital Asphalt menggunakan sistem proteksi berlapis:
   - /ssh atau bebas (/anypath)
 - Custom multi-path tersedia di port tertentu
 - Support TLS & Non-TLS
+- Support Enhanced
+- Support Wilcard
 
 ---
 
@@ -75,7 +90,8 @@ VPS (VPN SERVER)
 ├── Xray (VMESS/VLESS/TROJAN)
 ├── SSH / Dropbear / WS
 ├── ZIVPN (UDP)
-└── NGINX (Reverse Proxy)
+├── NGINX (Reverse Proxy)
+└── WS Proxy (SSH WebSocket)
 
         ↓
 
@@ -94,54 +110,12 @@ Client User
 
 Jalankan di VPS:
 
-\`\`\`bash
+```bash
 git clone https://github.com/harnov-34/digitalasphalt /root/digitalasphalt
 cd /root/digitalasphalt
 chmod +x install.sh
 bash install.sh
-\`\`\`
 
----
-
-## 📦 FEATURES
-
-- Auto install full VPN stack
-- License system (anti crack)
-- Multi protocol support
-- Account management system
-- High performance (NGINX + XRAY)
-- Modular installer (auto update)
-
----
-
-## 🛠️ COMMANDS
-
-\`\`\`bash
-menu        # Main menu
-da-health   # Check service status
-da-update   # Update script
-\`\`\`
-
----
-
-## 🔒 SECURITY NOTE
-
-- Script ini tidak full di GitHub  
-- Core berjalan di server private  
-- License wajib aktif untuk semua fungsi  
-
-Tujuan:
-- Anti sharing script  
-- Anti bypass  
-- Kontrol penuh dari server pusat  
-
----
-
-## 📩 GET LICENSE
-
-Untuk menggunakan script ini, wajib memiliki License Code.
-
----
 
 ## ⚠️ DISCLAIMER
 
