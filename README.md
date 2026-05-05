@@ -7,7 +7,7 @@ Repository ini **bukan full script**, hanya berisi:
 - public modules
 - runtime guard
 
-👉 Core logic & license system berjalan di server private (VPS-CBN)
+👉 Core logic & license system berjalan di server private
 
 ---
 
@@ -79,8 +79,8 @@ ZIVPN adalah fitur tambahan untuk koneksi berbasis UDP (lebih stabil untuk jarin
 
 (PRIVATE CORE)
 │
-├── License Server (3559)
-├── Core Validation (8806)
+├── License Server
+├── Core Validation
 └── Private Core Logic
 
         ↓
@@ -93,9 +93,6 @@ VPS (VPN SERVER)
 ├── NGINX (Reverse Proxy)
 └── WS Proxy (SSH WebSocket)
 
-        ↓
-
-Client User
 
 ---
 
