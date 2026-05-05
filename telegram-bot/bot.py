@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
-import os, json, random, string, asyncio, re
+import os
+import time
+import json
+import hmac
+import hashlib, json, random, string, asyncio, re
 from pathlib import Path
+import httpx
 from datetime import datetime, timedelta
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackQueryHandler, ContextTypes
@@ -14,6 +19,16 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 USERS=DATA_DIR/"users.json"
 SERVERS=DATA_DIR/"servers.json"
 ORDERS=DATA_DIR/"orders.json"
+PAYMENTS=DATA_DIR/"payments.json"
+
+PAYMENT_PROVIDER=os.getenv("PAYMENT_PROVIDER","")
+IPAYMU_BASE_URL=os.getenv("IPAYMU_BASE_URL","https://my.ipaymu.com").rstrip("/")
+IPAYMU_VA=os.getenv("IPAYMU_VA","")
+IPAYMU_API_KEY=os.getenv("IPAYMU_API_KEY","")
+IPAYMU_RETURN_URL=os.getenv("IPAYMU_RETURN_URL","https://cbn.digitalasphalt.my.id/payment/success")
+IPAYMU_CANCEL_URL=os.getenv("IPAYMU_CANCEL_URL","https://cbn.digitalasphalt.my.id/payment/cancel")
+IPAYMU_NOTIFY_URL=os.getenv("IPAYMU_NOTIFY_URL","https://cbn.digitalasphalt.my.id/payment/ipaymu/callback")
+
 
 PROTOS=["SSH","VMESS","VLESS","TROJAN","ZIVPN"]
 PLANS={
@@ -85,6 +100,55 @@ def server_flag(label):
         return "🇯🇵"
     return "🌐"
 
+
+def get_server_by_label(label):
+    for srv in active_servers():
+        if (srv.get("label") or srv.get("name") or "") == label:
+            return srv
+    return None
+
+def live_zivpn_password(username, server_label):
+    srv = get_server_by_label(server_label)
+    if not srv:
+        return None
+
+    host = srv.get("host")
+    port = str(srv.get("port") or srv.get("ssh_port") or 22)
+    rootuser = srv.get("user") or srv.get("ssh_user") or "root"
+    auth = srv.get("password") or srv.get("ssh_password") or srv.get("key") or "/root/.ssh/id_rsa"
+
+    remote_cmd = (
+        "awk -F':' -v u='" + username.replace("'", "'\\''") + "' "
+        "'$1==u{print $2; exit}' /etc/zivpn/user.db 2>/dev/null"
+    )
+
+    if auth.startswith("/") or auth.startswith("~"):
+        cmd = [
+            "ssh", "-i", auth,
+            "-o", "StrictHostKeyChecking=no",
+            "-o", "UserKnownHostsFile=/dev/null",
+            "-p", port,
+            f"{rootuser}@{host}",
+            remote_cmd
+        ]
+    else:
+        cmd = [
+            "sshpass", "-p", auth,
+            "ssh",
+            "-o", "StrictHostKeyChecking=no",
+            "-o", "UserKnownHostsFile=/dev/null",
+            "-p", port,
+            f"{rootuser}@{host}",
+            remote_cmd
+        ]
+
+    try:
+        out = subprocess.check_output(cmd, stderr=subprocess.DEVNULL, timeout=7)
+        val = out.decode(errors="ignore").strip()
+        return val or None
+    except Exception:
+        return None
+
 def active_servers():
     return [s for s in load(SERVERS,[]) if s.get("active",True)]
 
@@ -127,59 +191,106 @@ async def cb(update:Update, context:ContextTypes.DEFAULT_TYPE):
     user,db=get_user(uid,q.from_user.first_name or "")
     data=q.data
 
+
     if data == "topup":
         uid = update.effective_user.id
 
-        await q.message.reply_photo(
-            photo="AgACAgUAAxkBAAIBf2n4Yr1YWYhX77fjKjM5TaqcUuNcAALpEGsbWBvBV3IvB1BgX4dfAQADAgADeQADOwQ",
-            caption=(
-                "💳 QRIS PAYMENT DIGITAL ASPHALT\n"
-                "━━━━━━━━━━━━━━━━━━━━\n\n"
-                "Scan QR di atas untuk bayar topup saldo.\n"
-                "Setelah bayar WAJIB kirim screenshot ke admin.\n"
-                "Admin: @d_asphalt\n\n"
-                f"User ID: {uid}\n\nKirim bukti bayar ke admin: @d_asphalt"
-            )
-        )
-
-        uid = update.effective_user.id
         kb = [
+            [InlineKeyboardButton("💵 Rp 5.000", callback_data="topup_nominal:5000")],
             [InlineKeyboardButton("💵 Rp 10.000", callback_data="topup_nominal:10000")],
             [InlineKeyboardButton("💵 Rp 25.000", callback_data="topup_nominal:25000")],
             [InlineKeyboardButton("💵 Rp 50.000", callback_data="topup_nominal:50000")],
+            [InlineKeyboardButton("💵 Rp 100.000", callback_data="topup_nominal:100000")],
             [InlineKeyboardButton("⬅️ Kembali", callback_data="back_start")],
         ]
+
         await q.message.edit_text(
             "💰 TOPUP SALDO DIGITAL ASPHALT\n"
             "━━━━━━━━━━━━━━━━━━━━\n"
-            "Payment sementara manual.\n\n"
-            "Pilih nominal topup, lalu bayar via QRIS/transfer admin.\n"
-            "Setelah bayar WAJIB kirim screenshot ke admin.\n"
-                "Admin: @d_asphalt\n\n"
+            "Pilih nominal topup.\n\n"
+            "Invoice otomatis via iPaymu.\n"
+            "Saldo masuk otomatis setelah bayar.\n\n"
             f"User ID kamu: {uid}",
             reply_markup=InlineKeyboardMarkup(kb)
         )
         return
 
+
     if data.startswith("topup_nominal:"):
-        amount = int(data.split(":",1)[1])
-        uid = update.effective_user.id
+        amount = int(data.split(":")[1])
+        uid = str(q.from_user.id)
+        name = q.from_user.first_name or ""
+
+        if amount < 5000:
+            await q.message.edit_text("Minimal topup Rp 5.000")
+            return
+
+        pdb = payment_load()
+        now = int(time.time())
+        EXPIRE = 1800
+
+        for ref, trx in pdb.items():
+            if str(trx.get("uid")) != uid:
+                continue
+            if trx.get("status") != "PENDING":
+                continue
+
+            created = int(trx.get("created", 0))
+            if created and now - created > EXPIRE:
+                trx["status"] = "EXPIRED"
+                continue
+
+            pay_url = trx.get("pay_url", "")
+
+            msg = (
+                f"⚠️ Kamu masih punya invoice PENDING\n\n"
+                f"Ref: `{ref}`\n"
+                f"Nominal: Rp {rupiah(trx.get('amount',0))}\n\n"
+            )
+
+            if pay_url:
+                msg += f"{pay_url}\n\n"
+
+            msg += f"/cekbayar {ref}"
+
+            await q.message.edit_text(msg, parse_mode="Markdown")
+            payment_save(pdb)
+            return
+
+        ref, data = await ipaymu_create_payment(uid, name, amount)
+
+        ddata = data.get("Data") if isinstance(data.get("Data"), dict) else {}
+        pay_url = ddata.get("Url") or ddata.get("url") or data.get("Url") or data.get("url")
+
+        pdb[ref] = {
+            "ref": ref,
+            "uid": uid,
+            "amount": amount,
+            "status": "PENDING",
+            "gateway": "ipaymu",
+            "pay_url": pay_url or "",
+            "raw": data,
+            "created": int(time.time()),
+        }
+
+        payment_save(pdb)
+
+        if not pay_url:
+            await q.message.edit_text("Gagal buat invoice")
+            return
+
         await q.message.edit_text(
-            "✅ INVOICE MANUAL TOPUP\n"
-            "━━━━━━━━━━━━━━━━━━━━\n"
-            f"Nominal : Rp {amount:,}\n"
-            f"User ID : {uid}\n\n"
-            "Silakan bayar via QRIS/transfer admin.\n"
-            "Setelah bayar, kirim screenshot ke admin.\n\n"
-            f"Format chat admin:\nTOPUP {amount} {uid}\n\n"
-            "Saldo masuk setelah admin approve.",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("📩 Kirim SS ke Admin", url="https://t.me/d_asphalt")],
-                [InlineKeyboardButton("⬅️ Kembali", callback_data="topup")],
-                [InlineKeyboardButton("✅ Saya Sudah Bayar", callback_data="paid")]
-            ])
+            "✅ Invoice topup berhasil dibuat.\n\n"
+            f"Ref: `{ref}`\n"
+            f"Nominal: Rp {rupiah(amount)}\n\n"
+            f"Bayar di link ini:\n{pay_url}\n\n"
+            f"Setelah bayar, gunakan:\n/cekbayar {ref}",
+            parse_mode="Markdown"
         )
         return
+
+
+
 
     if data == "back_start":
         await start(update, context)
@@ -191,19 +302,32 @@ async def cb(update:Update, context:ContextTypes.DEFAULT_TYPE):
             await q.message.reply_text("📦 AKUN SAYA\n━━━━━━━━━━━━━━━━━━━━\nBelum ada akun aktif.")
             return
 
-        txt = "📦 *AKUN SAYA*\n━━━━━━━━━━━━━━━━━━━━\n"
-        for i, a in enumerate(accs, 1):
-            detail = a.get("detail")
-            if detail:
-                txt += f"\n*{i}. {a.get('service','-')}*\n```{detail[-3200:]}```\n"
-            else:
-                txt += (
-                    f"\n*{i}. {a.get('service','-')}*\n"
-                    f"Username : `{a.get('username','-')}`\n"
-                    f"Server   : {a.get('server','-')}\n"
-                    f"Masa Aktif: {a.get('days','-')}\n"
-                )
+        accounts = accs
 
+        txt = "📦 *AKUN SAYA*\n━━━━━━━━━━━━━━━━━━━━\n\n"
+        for i, a in enumerate(accounts, 1):
+            service = str(a.get("service", "VPN")).upper()
+            server = a.get("server") or a.get("server_label") or "-"
+            username = a.get("password") or a.get("pass") or a.get("username") or "-"
+            if service == "ZIVPN":
+                username = live_zivpn_password(a.get("username", ""), server) or username
+            domain = a.get("domain") or "telkom.nam.engineering"
+            days = str(a.get("days") or a.get("expired") or "-")
+
+            if days.isdigit():
+                expired = f"{days} Hari Lagi"
+            elif "jam" in days.lower():
+                expired = days.replace("jam", "Jam").replace("lagi", "Lagi")
+            else:
+                expired = days
+
+            txt += (
+                f"{i}. 🟢 *{service}*\n"
+                f"👤 Password : `{username}`\n"
+                f"🌐 Domain   : `{domain}`\n"
+                f"🖥️ Server   : *{server}*\n"
+                f"⏳ Expired  : *{expired}*\n\n"
+            )
         await q.message.reply_text(txt[:3900], parse_mode="Markdown")
         return
 
@@ -296,6 +420,7 @@ async def cb(update:Update, context:ContextTypes.DEFAULT_TYPE):
         user.setdefault("accounts",[]).append({
             "service":proto,
             "username":username,
+            "password":password,
             "server":label,
             "days":("2 Jam" if proto == "ZIVPN" and plan_id == "TRIAL" else plan["days"]),
             "created":datetime.now().isoformat()
@@ -304,12 +429,252 @@ async def cb(update:Update, context:ContextTypes.DEFAULT_TYPE):
         save(USERS,db)
 
         orders=load(ORDERS,[])
-        orders.append({"uid":uid,"proto":proto,"server":label,"username":username,"plan":plan_id,"time":datetime.now().isoformat()})
+        orders.append({"uid":uid,"proto":proto,"server":label,"username":username,
+            "password":password,"plan":plan_id,"time":datetime.now().isoformat()})
         save(ORDERS,orders)
 
         out=clean_output(out)
         await q.edit_message_text(f"✅ *{proto} Account Created*\n\n```{out[-3500:]}```",parse_mode="Markdown")
         return
+
+
+def payment_load():
+    return load(PAYMENTS, {})
+
+def payment_save(db):
+    save(PAYMENTS, db)
+
+
+
+def get_pending_invoice(uid):
+    pdb = payment_load()
+    now = int(time.time())
+    EXPIRE = 1800  # 30 menit
+
+    for ref, trx in pdb.items():
+        if trx.get("uid") == uid and trx.get("status") == "PENDING":
+            created = trx.get("created", 0)
+
+            # cek expired
+            if now - created > EXPIRE:
+                trx["status"] = "EXPIRED"
+                continue
+
+            return ref, trx
+
+    payment_save(pdb)
+    return None, None
+
+def ipaymu_signature(method, endpoint, body_json):
+    body_hash = hashlib.sha256(body_json.encode("utf-8")).hexdigest().lower()
+    string_to_sign = f"{method.upper()}:{IPAYMU_VA}:{body_hash}:{IPAYMU_API_KEY}"
+    return hmac.new(
+        IPAYMU_API_KEY.encode("latin-1"),
+        string_to_sign.encode("latin-1"),
+        hashlib.sha256
+    ).hexdigest()
+
+
+
+def find_pending_invoice(uid):
+    pdb = payment_load()
+    now = int(time.time())
+    expire_sec = 1800
+
+    for ref, trx in list(pdb.items()):
+        if str(trx.get("uid")) != str(uid):
+            continue
+        if str(trx.get("status", "")).upper() != "PENDING":
+            continue
+
+        created = int(trx.get("created", 0))
+        if created and now - created > expire_sec:
+            trx["status"] = "EXPIRED"
+            pdb[ref] = trx
+            payment_save(pdb)
+            continue
+
+        return ref, trx
+
+    return None, None
+
+async def ipaymu_create_payment(uid, name, amount):
+    endpoint = "/api/v2/payment"
+    ref = f"DA{uid}{int(time.time())}"
+    payload = {
+        "product": ["Topup Saldo Digital Asphalt"],
+        "qty": ["1"],
+        "price": [str(int(amount))],
+        "description": ["Topup Saldo Digital Asphalt"],
+        "returnUrl": IPAYMU_RETURN_URL,
+        "cancelUrl": IPAYMU_CANCEL_URL,
+        "notifyUrl": IPAYMU_NOTIFY_URL,
+        "referenceId": ref
+    }
+
+    body = json.dumps(payload, separators=(",", ":"))
+    sig = ipaymu_signature("POST", endpoint, body)
+    headers = {
+        "Content-Type": "application/json",
+        "va": IPAYMU_VA,
+        "signature": sig,
+        "timestamp": time.strftime("%Y%m%d%H%M%S"),
+    }
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.post(IPAYMU_BASE_URL + endpoint, content=body, headers=headers)
+        txt = r.text
+        try:
+            data = r.json()
+        except Exception:
+            data = {"Status": 0, "Message": txt, "Data": None}
+
+    return ref, data
+async def topup(update:Update, context:ContextTypes.DEFAULT_TYPE):
+    uid = str(update.effective_user.id)
+    name = update.effective_user.first_name or ""
+
+    if len(context.args) < 1:
+        await update.message.reply_text("Format: /topup 10000")
+        return
+
+    try:
+        amount = int(context.args[0])
+    except Exception:
+        await update.message.reply_text("Nominal harus angka.")
+        return
+
+    if amount < 5000:
+        await update.message.reply_text("Minimal topup Rp 5.000")
+        return
+
+    pdb = payment_load()
+    now = int(time.time())
+
+    EXPIRE = 1800
+    COOLDOWN = 20
+    MAX_UNPAID_DAY = 3
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    unpaid_today = 0
+    last_created = 0
+
+    for ref, trx in pdb.items():
+        if str(trx.get("uid")) != uid:
+            continue
+
+        status = str(trx.get("status","PENDING")).upper()
+        created = int(trx.get("created",0) or 0)
+
+        if created > last_created:
+            last_created = created
+
+        trx_day = datetime.fromtimestamp(created).strftime("%Y-%m-%d") if created else ""
+
+        # auto expire
+        if status == "PENDING" and created and now - created > EXPIRE:
+            trx["status"] = "EXPIRED"
+            status = "EXPIRED"
+
+        # masih pending
+        if status == "PENDING":
+            pay_url = trx.get("pay_url","")
+
+            if not pay_url:
+                raw = trx.get("raw",{})
+                if isinstance(raw, dict):
+                    ddata = raw.get("Data") if isinstance(raw.get("Data"), dict) else {}
+                    pay_url = ddata.get("Url") or ddata.get("url") or raw.get("Url") or raw.get("url") or ""
+
+            payment_save(pdb)
+
+            msg = f"⚠️ Kamu masih punya invoice PENDING\n\nRef: `{ref}`\nNominal: Rp {rupiah(int(trx.get('amount',0)))}\n\n"
+
+            if pay_url:
+                msg += f"Bayar di sini:\n{pay_url}\n\n"
+
+            msg += f"/cekbayar {ref}"
+
+            await update.message.reply_text(msg, parse_mode="Markdown")
+            return
+
+        # hitung abuse
+        if trx_day == today and status in ["EXPIRED","FAILED","CANCEL","CANCELED","CANCELLED"]:
+            unpaid_today += 1
+
+    payment_save(pdb)
+
+    # cooldown
+    if last_created and now - last_created < COOLDOWN:
+        await update.message.reply_text(
+            f"⏳ Tunggu {COOLDOWN - (now - last_created)} detik"
+        )
+        return
+
+    # limit harian
+    if unpaid_today >= MAX_UNPAID_DAY:
+        await update.message.reply_text(
+            "🚫 Limit invoice harian tercapai"
+        )
+        return
+
+    if PAYMENT_PROVIDER != "ipaymu":
+        await update.message.reply_text("Payment gateway belum aktif.")
+        return
+
+    if not IPAYMU_VA or not IPAYMU_API_KEY:
+        await update.message.reply_text("Config iPaymu belum lengkap.")
+        return
+
+    ref, data = await ipaymu_create_payment(uid, name, amount)
+
+    ddata = data.get("Data") if isinstance(data.get("Data"), dict) else {}
+    pay_url = ddata.get("Url") or ddata.get("url") or data.get("Url") or data.get("url")
+
+    pdb[ref] = {
+        "ref": ref,
+        "uid": uid,
+        "amount": amount,
+        "status": "PENDING",
+        "gateway": "ipaymu",
+        "pay_url": pay_url or "",
+        "raw": data,
+        "created": int(time.time()),
+    }
+
+    payment_save(pdb)
+
+    if not pay_url:
+        await update.message.reply_text(f"Gagal buat invoice\nRef: {ref}")
+        return
+
+    await update.message.reply_text(
+        f"✅ Invoice dibuat\n\nRef: `{ref}`\nNominal: Rp {rupiah(amount)}\n\n{pay_url}",
+        parse_mode="Markdown"
+    )
+
+async def cekbayar(update:Update, context:ContextTypes.DEFAULT_TYPE):
+    uid = str(update.effective_user.id)
+    if len(context.args) < 1:
+        await update.message.reply_text("Format: /cekbayar REF")
+        return
+
+    ref = context.args[0].strip()
+    pdb = payment_load()
+    trx = pdb.get(ref)
+
+    if not trx:
+        await update.message.reply_text("Invoice tidak ditemukan.")
+        return
+
+    if trx.get("uid") != uid and update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("Invoice bukan milik kamu.")
+        return
+
+    await update.message.reply_text(
+        f"Status invoice {ref}: {trx.get('status','PENDING')}\n"
+        f"Nominal: Rp {rupiah(int(trx.get('amount',0)))}"
+    )
 
 async def addsaldo(update:Update, context:ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID: return
@@ -409,6 +774,8 @@ def main():
         .build()
     )
     app.add_handler(CommandHandler("start",start))
+    app.add_handler(CommandHandler("topup",topup))
+    app.add_handler(CommandHandler("cekbayar",cekbayar))
     app.add_handler(MessageHandler(filters.PHOTO, get_photo_id))
     app.add_handler(CommandHandler("addsaldo",addsaldo))
     app.add_handler(CommandHandler("addserver",addserver))

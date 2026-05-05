@@ -1,14 +1,3 @@
-telegram-bot/data/*
-!telegram-bot/data/.gitkeep
-telegram-bot/__pycache__/
-*.pyc
-*.bak*
-sbin/
-
-# sensitive
-/opt/
-/data/
-*.env
-config.env
-
 telegram-bot/data/
+*.log
+*.json
