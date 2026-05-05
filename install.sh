@@ -4,7 +4,7 @@ set -euo pipefail
 BRAND="Digital Asphalt"
 REPO_URL="https://github.com/harnov-34/digitalasphalt.git"
 WORKDIR="/root/digitalasphalt"
-LICENSE_API="http://101.128.95.245:3559"
+LICENSE_API="http://cbn.digitalasphalt.my.id:3559"
 
 clear
 echo "======================================"
