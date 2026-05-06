@@ -1,4 +1,4 @@
-# 🚀 Digital Asphalt VPN Script
+# 🚀 Digital Asphalt Auto Script VPN
 
 Digital Asphalt adalah **autoscript VPN premium** dengan sistem **license + private core + runtime protection**, dirancang untuk penggunaan production.
 
