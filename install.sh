@@ -3,7 +3,7 @@ set -euo pipefail
 
 BRAND="Digital Asphalt"
 REPO_URL="https://github.com/harnov-34/digitalasphalt.git"
-WORKDIR="/root/digitalasphalt"
+WORKDIR="/tmp/digitalasphalt-install"
 LICENSE_API="http://cbn.digitalasphalt.my.id:3559"
 
 clear
@@ -58,6 +58,7 @@ apt update
 DEBIAN_FRONTEND=noninteractive apt install -y git curl wget unzip jq python3 python3-pip nginx certbot net-tools socat cron fail2ban
 
 echo "[INFO] Sync public repo..."
+rm -rf "$WORKDIR"
 rm -rf "$WORKDIR"
 git clone --depth=1 "$REPO_URL" "$WORKDIR"
 cd "$WORKDIR"
