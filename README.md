@@ -133,9 +133,11 @@ bash install.sh
 
 ## ⚠️ DISCLAIMER
 
-Script ini dibuat untuk penggunaan legal & edukasi.
+Digital Asphalt dibuat untuk kebutuhan legal, edukasi, dan research.
 
-Segala penyalahgunaan bukan tanggung jawab developer.
-📨 Contact:
-- Telegram: [@d_asphalt](https://t.me/d_asphalt)
-- Website: https://vpn-premium.digitalasphalt.my.id
+Developer tidak bertanggung jawab atas penyalahgunaan script.
+
+<p align="center">
+  <a href="https://t.me/d_asphalt">Telegram</a> •
+  <a href="https://vpn-premium.digitalasphalt.my.id">Website</a>
+</p>
