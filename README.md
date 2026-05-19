@@ -136,4 +136,6 @@ bash install.sh
 Script ini dibuat untuk penggunaan legal & edukasi.
 
 Segala penyalahgunaan bukan tanggung jawab developer.
-Telegram : https://t.me/d_asphalt
+📨 Contact:
+- Telegram: [@d_asphalt](https://t.me/d_asphalt)
+- Website: https://vpn-premium.digitalasphalt.my.id
