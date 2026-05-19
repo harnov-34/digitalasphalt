@@ -134,10 +134,18 @@ bash install.sh
 ## ⚠️ DISCLAIMER
 
 Digital Asphalt dibuat untuk kebutuhan legal, edukasi, dan research.
-
 Developer tidak bertanggung jawab atas penyalahgunaan script.
 
-<p align="center">
-  <a href="https://t.me/d_asphalt">Telegram</a> •
-  <a href="https://vpn-premium.digitalasphalt.my.id">Website</a>
-</p>
+<div align="center">
+
+### 📞 CONTACT
+
+<a href="https://t.me/d_asphalt">
+  <img src="https://img.shields.io/badge/Telegram-@d__asphalt-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white">
+</a>
+
+<a href="https://vpn-premium.digitalasphalt.my.id">
+  <img src="https://img.shields.io/badge/Website-Digital%20Asphalt-111827?style=for-the-badge&logo=google-chrome&logoColor=white">
+</a>
+
+</div>
