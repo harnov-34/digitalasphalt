@@ -120,7 +120,7 @@ VPS VPN SERVER
 
 ## 🚀 INSTALL
 
-Copy & jalankan command berikut di VPS:
+Copy & jalankan command berikut di VPS FRESH:
 
 ```bash
 git clone https://github.com/harnov-34/digitalasphalt /root/digitalasphalt
