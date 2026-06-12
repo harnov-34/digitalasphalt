@@ -159,7 +159,13 @@ curl_get "$CORE_URL" -o "$WORKDIR/install-core.sh"
 chmod +x "$WORKDIR/install-core.sh"
 
 echo "[INFO] Running protected core..."
-DOMAIN="$DOMAIN" IPVPS="$IPVPS" BRAND="$BRAND" bash "$WORKDIR/install-core.sh"
+LICENSE_CODE="$LICENSE_CODE" \
+DA_CORE_TOKEN="$TOKEN" \
+DA_LICENSE_URL="$LICENSE_API" \
+DOMAIN="$DOMAIN" \
+IPVPS="$IPVPS" \
+BRAND="$BRAND" \
+bash "$WORKDIR/install-core.sh"
 
 echo
 echo "======================================"
