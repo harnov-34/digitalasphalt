@@ -76,6 +76,18 @@ save_domain() {
   chmod 644 /etc/digitalasphalt/domain /etc/xray/domain
 }
 
+is_trusted_owner_domain() {
+  local d="${1:-}"
+  case "$d" in
+    nam.engineering|*.nam.engineering|digitalasphalt.my.id|*.digitalasphalt.my.id)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 internet_check() {
   echo "[INFO] Checking internet connectivity..."
   curl_get https://api.github.com >/dev/null || die "Internet/GitHub tidak bisa diakses."
@@ -97,9 +109,17 @@ read -rp "Domain VPS VPN : " DOMAIN
 DOMAIN="$(echo "$DOMAIN" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
 validate_domain "$DOMAIN" || die "Format domain tidak valid: $DOMAIN"
 
-read -rp "License Code   : " LICENSE_CODE
-LICENSE_CODE="$(echo "$LICENSE_CODE" | tr -d '[:space:]')"
-[ -n "$LICENSE_CODE" ] || die "License code kosong."
+if is_trusted_owner_domain "$DOMAIN"; then
+  LICENSE_CODE="OWNER-TRUSTED"
+  OWNER_MODE=1
+  echo "[OK] Trusted owner domain detected."
+  echo "[INFO] License Code tidak diperlukan."
+else
+  read -rp "License Code   : " LICENSE_CODE
+  LICENSE_CODE="$(echo "$LICENSE_CODE" | tr -d '[:space:]')"
+  [ -n "$LICENSE_CODE" ] || die "License code kosong."
+  OWNER_MODE=0
+fi
 
 IPVPS="$(get_public_ip)"
 [ -n "$IPVPS" ] || die "Gagal deteksi public IPv4 VPS."
@@ -107,21 +127,19 @@ IPVPS="$(get_public_ip)"
 echo
 echo "[INFO] Public IP : $IPVPS"
 echo "[INFO] Domain    : $DOMAIN"
-echo "[INFO] Checking license..."
+if [ "${OWNER_MODE:-0}" -eq 1 ]; then
+  echo "[OK] Owner mode active."
+  echo "[INFO] License verification skipped for trusted owner domain."
+  TOKEN=""
+else
+  echo "[INFO] Checking license..."
 
-NONCE="$(python3 - <<'PY'
-import secrets
-print(secrets.token_urlsafe(24))
-PY
-)"
-TS="$(date +%s)"
+  VERIFY_URL="${LICENSE_API}/verify?code=${LICENSE_CODE}&ip=${IPVPS}&domain=${DOMAIN}&ts=${TS}&nonce=${NONCE}"
 
-VERIFY_URL="${LICENSE_API}/verify?code=${LICENSE_CODE}&ip=${IPVPS}&domain=${DOMAIN}&ts=${TS}&nonce=${NONCE}"
+  RESP="$(curl_get "$VERIFY_URL" || true)"
+  [ -n "$RESP" ] || die "License server tidak merespon."
 
-RESP="$(curl_get "$VERIFY_URL" || true)"
-[ -n "$RESP" ] || die "License server tidak merespon."
-
-OK="$(python3 - <<PY
+  OK="$(python3 - <<PY
 import json,sys
 try:
     r=json.loads("""$RESP""")
@@ -131,18 +149,20 @@ except Exception:
 PY
 )"
 
-[ "$OK" = "1" ] || die "License invalid / expired / tidak cocok IP-domain. Response: $RESP"
+  [ "$OK" = "1" ] || die "License invalid / expired / tidak cocok IP-domain. Response: $RESP"
 
-TOKEN="$(python3 - <<PY
+  TOKEN="$(python3 - <<PY
 import json
 r=json.loads("""$RESP""")
 print(r.get("token",""))
 PY
 )"
 
-[ -n "$TOKEN" ] || die "Token bootstrap kosong dari license server."
+  [ -n "$TOKEN" ] || die "Token bootstrap kosong dari license server."
 
-echo "[OK] License valid."
+  echo "[OK] License valid."
+fi
+
 echo "[INFO] Saving domain..."
 save_domain "$DOMAIN"
 
@@ -150,9 +170,15 @@ echo "[INFO] Preparing workspace..."
 rm -rf "$WORKDIR"
 mkdir -p "$WORKDIR"
 
-echo "[INFO] Download protected core..."
-CORE_URL="${LICENSE_API}/core/install-core.sh?token=${TOKEN}&ip=${IPVPS}&domain=${DOMAIN}&ts=${TS}&nonce=${NONCE}"
-curl_get "$CORE_URL" -o "$WORKDIR/install-core.sh"
+if [ "${OWNER_MODE:-0}" -eq 1 ]; then
+  echo "[INFO] Downloading owner core..."
+  OWNER_URL="${LICENSE_API}/owner/core/install-core.sh?ip=${IPVPS}&domain=${DOMAIN}&ts=${TS}&nonce=${NONCE}"
+  curl_get "$OWNER_URL" -o "$WORKDIR/install-core.sh"
+else
+  echo "[INFO] Download protected core..."
+  CORE_URL="${LICENSE_API}/core/install-core.sh?token=${TOKEN}&ip=${IPVPS}&domain=${DOMAIN}&ts=${TS}&nonce=${NONCE}"
+  curl_get "$CORE_URL" -o "$WORKDIR/install-core.sh"
+fi
 
 [ -s "$WORKDIR/install-core.sh" ] || die "Protected core kosong/gagal download."
 
