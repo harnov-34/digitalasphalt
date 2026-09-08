@@ -124,6 +124,10 @@ fi
 IPVPS="$(get_public_ip)"
 [ -n "$IPVPS" ] || die "Gagal deteksi public IPv4 VPS."
 
+# Generate request metadata once and reuse for both owner and licensed flows.
+NONCE="$(python3 -c 'import secrets; print(secrets.token_hex(16))')"
+TS="$(date +%s)"
+
 echo
 echo "[INFO] Public IP : $IPVPS"
 echo "[INFO] Domain    : $DOMAIN"
